@@ -25,6 +25,7 @@ import math
 from tqdm.auto import tqdm
 from diffusers.training_utils import compute_snr
 import torchvision.transforms.functional as TF
+import GPUtil
 
 
 
@@ -238,9 +239,9 @@ class VitonHDDataset(data.Dataset):
         result["cloth_pure"] = self.transform(cloth)
         result["inpaint_mask"] = 1-mask
         result["im_mask"] = im_mask
-        result["caption"] = "model is wearing " + cloth_annotation
-        result["caption_cloth"] = "a photo of " + cloth_annotation
-        result["annotation"] = cloth_annotation
+        result["caption"] = ""
+        result["caption_cloth"] = ""
+        result["annotation"] = ""
         result["pose_img"] = pose_img
 
 
@@ -263,7 +264,7 @@ def parse_args():
     parser.add_argument("--width",type=int,default=768,)
     parser.add_argument("--height",type=int,default=1024,)
     parser.add_argument("--gradient_accumulation_steps",type=int,default=1,help="Number of updates steps to accumulate before performing a backward/update pass.",)
-    parser.add_argument("--logging_steps",type=int,default=1000,help=("Save a checkpoint of the training state every X updates. These checkpoints are only suitable for resuming"" training using `--resume_from_checkpoint`."),)
+    parser.add_argument("--logging_steps",type=int,default=1000,help=("Save a checkpoint of the training state every X updates. These checkpoints are only suitable for resuming"" training using ` `."),)
     parser.add_argument("--output_dir",type=str,default="output",help="The output directory where the model predictions and checkpoints will be written.",)
     parser.add_argument("--snr_gamma",type=float,default=None,help="SNR weighting gamma to be used if rebalancing the loss. Recommended value is 5.0. ""More details here: https://arxiv.org/abs/2303.09556.",)
     parser.add_argument("--num_tokens",type=int,default=16,help=("IP adapter token nums"),)
@@ -286,7 +287,7 @@ def parse_args():
     parser.add_argument("--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
     parser.add_argument("--data_dir", type=str, default="/home/omnious/workspace/yisol/Dataset/VITON-HD/zalando", help="For distributed training: local_rank")
-
+    
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -295,12 +296,20 @@ def parse_args():
     return args
 
 
-
+def get_gpu_memory():
+    gpus = GPUtil.getGPUs()
+    for gpu in gpus:
+        print(f"GPU {gpu.id}: {gpu.name}")
+        print(f"  Total memory: {gpu.memoryTotal} MB")
+        print(f"  Used memory: {gpu.memoryUsed} MB")
+        print(f"  Free memory: {gpu.memoryFree} MB")
+        print(f"  GPU utilization: {gpu.load * 100}%")
+        print(f"  GPU temperature: {gpu.temperature} C")
+        print("-" * 40)
 
 
 def main():
-
-
+    # base_path = 'yisol/IDM-VTON'
     args = parse_args()
     accelerator_project_config = ProjectConfiguration(project_dir=args.output_dir)
     accelerator = Accelerator(
@@ -308,71 +317,32 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         project_config=accelerator_project_config,
     )
-
+    print(f"device:{accelerator.device}")
     if accelerator.is_main_process:
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
 
     # Load scheduler, tokenizer and models.
-    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler",rescale_betas_zero_snr=True)
-    tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder")
-    tokenizer_2 = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer_2")
-    text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder_2")
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path,subfolder="vae",torch_dtype=torch.float16,)
-    unet_encoder = UNet2DConditionModel_ref.from_pretrained(args.pretrained_garmentnet_path, subfolder="unet")
-    unet_encoder.config.addition_embed_type = None
-    unet_encoder.config["addition_embed_type"] = None
-    image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.image_encoder_path)
+    noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler",rescale_betas_zero_snr=True,local_files_only=True)
+    tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer",local_files_only=True)
+    text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder",local_files_only=True)
+    tokenizer_2 = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer_2",local_files_only=True)
+    text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(args.pretrained_model_name_or_path,subfolder="text_encoder_2",local_files_only=True)
+    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae",torch_dtype=torch.float16,local_files_only=True)
+    unet_encoder = UNet2DConditionModel_ref.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet_encoder",local_files_only=True)
+    image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.pretrained_model_name_or_path, subfolder="image_encoder",local_files_only=True)
 
     #customize unet start
-    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None)
-    unet.config.encoder_hid_dim = image_encoder.config.hidden_size
-    unet.config.encoder_hid_dim_type = "ip_image_proj"
-    unet.config["encoder_hid_dim"] = image_encoder.config.hidden_size
-    unet.config["encoder_hid_dim_type"] = "ip_image_proj"
-
+    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None,local_files_only=True)
 
     state_dict = torch.load(args.pretrained_ip_adapter_path, map_location="cpu")
  
  
-    adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
-    adapter_modules.load_state_dict(state_dict["ip_adapter"],strict=False)
+    # adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
+    # adapter_modules.load_state_dict(state_dict["ip_adapter"],strict=False)
 
     #ip-adapter
-    image_proj_model = Resampler(
-        dim=image_encoder.config.hidden_size,
-        depth=4,
-        dim_head=64,
-        heads=20,
-        num_queries=args.num_tokens,
-        embedding_dim=image_encoder.config.hidden_size,
-        output_dim=unet.config.cross_attention_dim,
-        ff_mult=4,
-    ).to(accelerator.device, dtype=torch.float32)
-
-    image_proj_model.load_state_dict(state_dict["image_proj"], strict=False)
-    image_proj_model.requires_grad_(True)
-
-    unet.encoder_hid_proj = image_proj_model
-
-    conv_new = torch.nn.Conv2d(
-        in_channels=4+4+1+4,
-        out_channels=unet.conv_in.out_channels,
-        kernel_size=3,
-        padding=1,
-    )
-    torch.nn.init.kaiming_normal_(conv_new.weight)  
-    conv_new.weight.data = conv_new.weight.data * 0.  
-
-    conv_new.weight.data[:, :9] = unet.conv_in.weight.data  
-    conv_new.bias.data = unet.conv_in.bias.data  
-
-    unet.conv_in = conv_new  # replace conv layer in unet
-    unet.config['in_channels'] = 13  # update config
-    unet.config.in_channels = 13  # update config
-    #customize unet end
-
+    image_proj_model = unet.encoder_hid_proj.to(accelerator.device, dtype=torch.float32)
 
     weight_dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
@@ -384,6 +354,13 @@ def main():
     text_encoder_2.to(accelerator.device, dtype=weight_dtype)
     image_encoder.to(accelerator.device, dtype=weight_dtype)
     unet_encoder.to(accelerator.device, dtype=weight_dtype)
+
+    print(f"VAE is on: {vae.device}")
+    print(f"Text Encoder is on: {text_encoder.device}")
+    print(f"Text Encoder 2 is on: {text_encoder_2.device}")
+    print(f"UNet Encoder is on: {unet_encoder.device}")
+    print(f"Image Encoder is on: {image_encoder.device}")
+    get_gpu_memory()
 
 
     vae.requires_grad_(False)
@@ -465,7 +442,11 @@ def main():
         overrode_max_train_steps = True
 
 
-    unet,image_proj_model,unet_encoder,image_encoder,optimizer,train_dataloader,test_dataloader = accelerator.prepare(unet, image_proj_model,unet_encoder,image_encoder,optimizer,train_dataloader,test_dataloader)
+    unet,optimizer,train_dataloader,test_dataloader = accelerator.prepare(unet,optimizer,train_dataloader,test_dataloader)
+    # image_proj_model= accelerator.prepare(image_proj_model)
+    # unet_encoder = accelerator.prepare(unet_encoder)
+    # image_encoder = accelerator.prepare(image_encoder)
+
     initial_global_step = 0
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
@@ -474,7 +455,7 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-
+    get_gpu_memory()
     # Train!
     progress_bar = tqdm(
         range(0, args.max_train_steps),
@@ -506,9 +487,16 @@ def main():
                                     image_encoder=image_encoder,
                                     unet_encoder = unet_encoder,
                                     torch_dtype=torch.float16,
+                                    feature_extractor=CLIPImageProcessor(),
                                     add_watermarker=False,
                                     safety_checker=None,
                                 ).to(accelerator.device)
+                                print(f"VAE is on: {vae.device}")
+                                print(f"Text Encoder is on: {text_encoder.device}")
+                                print(f"Text Encoder 2 is on: {text_encoder_2.device}")
+                                print(f"UNet Encoder is on: {unet_encoder.device}")
+                                print(f"Image Encoder is on: {image_encoder.device}")
+                                get_gpu_memory()
                                 with torch.no_grad():
                                     for sample in test_dataloader:
                                         img_emb_list = []
@@ -577,7 +565,7 @@ def main():
                                                 strength=1.0,
                                                 pose_img=F.interpolate(sample['pose_img'], size=(args.height, args.width), mode="bilinear", align_corners=False),
                                                 text_embeds_cloth=prompt_embeds_c,
-                                                cloth=sample["cloth_pure"].to(accelerator.device),
+                                                cloth=sample["cloth_pure"].to(newpipe.device),
                                                 mask_image=sample['inpaint_mask'],
                                                 image=(sample['image']+1.0)/2.0, 
                                                 height=args.height,
@@ -787,6 +775,7 @@ def main():
                     image_encoder=image_encoder,
                     unet_encoder=unet_encoder,
                     torch_dtype=torch.float16,
+                    feature_extractor=CLIPImageProcessor(),
                     add_watermarker=False,
                     safety_checker=None,
                 )

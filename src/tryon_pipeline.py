@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import time
 import inspect
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
@@ -1486,10 +1486,12 @@ class StableDiffusionXLInpaintPipeline(
                 "1.0.0",
                 "Passing `callback_steps` as an input argument to `__call__` is deprecated, consider use `callback_on_step_end`",
             )
-
+        ti = time.time()
         # 0. Default height and width to unet
         height = height or self.unet.config.sample_size * self.vae_scale_factor
         width = width or self.unet.config.sample_size * self.vae_scale_factor
+        print(f"step 0: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 1. Check inputs
         self.check_inputs(
@@ -1517,6 +1519,8 @@ class StableDiffusionXLInpaintPipeline(
         self._denoising_end = denoising_end
         self._denoising_start = denoising_start
         self._interrupt = False
+        print(f"step 1: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 2. Define call parameters
         if prompt is not None and isinstance(prompt, str):
@@ -1527,32 +1531,36 @@ class StableDiffusionXLInpaintPipeline(
             batch_size = prompt_embeds.shape[0]
 
         device = self._execution_device
+        print(f"step 2: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 3. Encode input prompt
         text_encoder_lora_scale = (
             self.cross_attention_kwargs.get("scale", None) if self.cross_attention_kwargs is not None else None
         )
 
-        (
-            prompt_embeds,
-            negative_prompt_embeds,
-            pooled_prompt_embeds,
-            negative_pooled_prompt_embeds,
-        ) = self.encode_prompt(
-            prompt=prompt,
-            prompt_2=prompt_2,
-            device=device,
-            num_images_per_prompt=num_images_per_prompt,
-            do_classifier_free_guidance=self.do_classifier_free_guidance,
-            negative_prompt=negative_prompt,
-            negative_prompt_2=negative_prompt_2,
-            prompt_embeds=prompt_embeds,
-            negative_prompt_embeds=negative_prompt_embeds,
-            pooled_prompt_embeds=pooled_prompt_embeds,
-            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
-            lora_scale=text_encoder_lora_scale,
-            clip_skip=self.clip_skip,
-        )
+        # (
+        #     prompt_embeds,
+        #     negative_prompt_embeds,
+        #     pooled_prompt_embeds,
+        #     negative_pooled_prompt_embeds,
+        # ) = self.encode_prompt(
+        #     prompt=prompt,
+        #     prompt_2=prompt_2,
+        #     device=device,
+        #     num_images_per_prompt=num_images_per_prompt,
+        #     do_classifier_free_guidance=self.do_classifier_free_guidance,
+        #     negative_prompt=negative_prompt,
+        #     negative_prompt_2=negative_prompt_2,
+        #     prompt_embeds=prompt_embeds,
+        #     negative_prompt_embeds=negative_prompt_embeds,
+        #     pooled_prompt_embeds=pooled_prompt_embeds,
+        #     negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
+        #     lora_scale=text_encoder_lora_scale,
+        #     clip_skip=self.clip_skip,
+        # )
+        print(f"step 3: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 4. set timesteps
         def denoising_value_valid(dnv):
@@ -1575,6 +1583,8 @@ class StableDiffusionXLInpaintPipeline(
         latent_timestep = timesteps[:1].repeat(batch_size * num_images_per_prompt)
         # create a boolean to check if the strength is set to 1. if so then initialise the latents with pure noise
         is_strength_max = strength == 1.0
+        print(f"step 4: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 5. Preprocess mask and image
         if padding_mask_crop is not None:
@@ -1600,11 +1610,14 @@ class StableDiffusionXLInpaintPipeline(
             masked_image = None
         else:
             masked_image = init_image * (mask < 0.5)
+        print(f"step 5: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 6. Prepare latent variables
         num_channels_latents = self.vae.config.latent_channels
         num_channels_unet = self.unet.config.in_channels
         return_image_latents = num_channels_unet == 4
+        print(num_channels_unet)
 
         add_noise = True if self.denoising_start is None else False
         latents_outputs = self.prepare_latents(
@@ -1628,6 +1641,8 @@ class StableDiffusionXLInpaintPipeline(
             latents, noise, image_latents = latents_outputs
         else:
             latents, noise = latents_outputs
+        print(f"step 6: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 7. Prepare mask latent variables
         mask, masked_image_latents = self.prepare_mask_latents(
@@ -1652,6 +1667,8 @@ class StableDiffusionXLInpaintPipeline(
                 torch.cat([pose_img] * 2) if self.do_classifier_free_guidance else pose_img
         )
         cloth = self._encode_vae_image(cloth, generator=generator)
+        print(f"step 7: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # # 8. Check that sizes of mask, masked image and latents match
         # if num_channels_unet == 9:
@@ -1672,6 +1689,8 @@ class StableDiffusionXLInpaintPipeline(
         #     )
         # 8.1 Prepare extra step kwargs.
         extra_step_kwargs = self.prepare_extra_step_kwargs(generator, eta)
+        print(f"step 8: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 9. Prepare extra step kwargs. TODO: Logic should ideally just be moved out of the pipeline
         height, width = latents.shape[-2:]
@@ -1680,6 +1699,8 @@ class StableDiffusionXLInpaintPipeline(
 
         original_size = original_size or (height, width)
         target_size = target_size or (height, width)
+        print(f"step 9: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 10. Prepare added time ids & embeddings
         if negative_original_size is None:
@@ -1713,6 +1734,7 @@ class StableDiffusionXLInpaintPipeline(
             add_neg_time_ids = add_neg_time_ids.repeat(batch_size * num_images_per_prompt, 1)
             add_time_ids = torch.cat([add_neg_time_ids, add_time_ids], dim=0)
 
+
         prompt_embeds = prompt_embeds.to(device)
         add_text_embeds = add_text_embeds.to(device)
         add_time_ids = add_time_ids.to(device)
@@ -1724,7 +1746,8 @@ class StableDiffusionXLInpaintPipeline(
 
             #project outside for loop
             image_embeds = self.unet.encoder_hid_proj(image_embeds).to(prompt_embeds.dtype)
-
+        print(f"step 10: {time.time() - ti:.2f} s")
+        ti = time.time()
 
         # 11. Denoising loop
         num_warmup_steps = max(len(timesteps) - num_inference_steps * self.scheduler.order, 0)
@@ -1749,7 +1772,6 @@ class StableDiffusionXLInpaintPipeline(
             )
             num_inference_steps = len(list(filter(lambda ts: ts >= discrete_timestep_cutoff, timesteps)))
             timesteps = timesteps[:num_inference_steps]
-
         # 11.1 Optionally get Guidance Scale Embedding
         timestep_cond = None
         if self.unet.config.time_cond_proj_dim is not None:
@@ -1758,11 +1780,13 @@ class StableDiffusionXLInpaintPipeline(
                 guidance_scale_tensor, embedding_dim=self.unet.config.time_cond_proj_dim
             ).to(device=device, dtype=latents.dtype)
 
-
+        gt = 0.0
+        tt = 0.0
 
         self._num_timesteps = len(timesteps)
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):
+                st = time.time()
                 if self.interrupt:
                     continue
                 # expand the latents if we are doing classifier free guidance
@@ -1775,7 +1799,7 @@ class StableDiffusionXLInpaintPipeline(
                 # bsz = mask.shape[0]
                 if num_channels_unet == 13:
                     latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents,pose_img], dim=1)
-
+                # 論文圖左邊concat
                 # if num_channels_unet == 9:
                 #     latent_model_input = torch.cat([latent_model_input, mask, masked_image_latents], dim=1)
 
@@ -1783,10 +1807,7 @@ class StableDiffusionXLInpaintPipeline(
                 added_cond_kwargs = {"text_embeds": add_text_embeds, "time_ids": add_time_ids}
                 if ip_adapter_image is not None:
                     added_cond_kwargs["image_embeds"] = image_embeds
-                # down,reference_features = self.UNet_Encoder(cloth,t, text_embeds_cloth,added_cond_kwargs= {"text_embeds": pooled_prompt_embeds_c, "time_ids": add_time_ids},return_dict=False)
-                down,reference_features = self.unet_encoder(cloth,t, text_embeds_cloth,return_dict=False)
-                # print(type(reference_features))
-                # print(reference_features)
+                _, reference_features = self.unet_encoder(cloth,t, text_embeds_cloth,return_dict=False)
                 reference_features = list(reference_features)
                 # print(len(reference_features))
                 # for elem in reference_features:
@@ -1794,7 +1815,8 @@ class StableDiffusionXLInpaintPipeline(
                 # exit(1)
                 if self.do_classifier_free_guidance:
                     reference_features = [torch.cat([torch.zeros_like(d), d]) for d in reference_features]
-
+                rft = time.time()
+                gt += (rft - st)
 
                 noise_pred = self.unet(
                     latent_model_input,
@@ -1806,7 +1828,7 @@ class StableDiffusionXLInpaintPipeline(
                     return_dict=False,
                     garment_features=reference_features,
                 )[0]
-                # noise_pred = self.unet(latent_model_input, t, 
+                # noise_pred = self.unet(latent_model_input, t,
                 #                             prompt_embeds,timestep_cond=timestep_cond,cross_attention_kwargs=self.cross_attention_kwargs,added_cond_kwargs=added_cond_kwargs,down_block_additional_attn=down ).sample
 
 
@@ -1864,7 +1886,10 @@ class StableDiffusionXLInpaintPipeline(
 
                 if XLA_AVAILABLE:
                     xm.mark_step()
-
+                ept = time.time()
+                tt += (ept - rft)
+        print(f"GNet:{gt:.2f} s\nTNet:{tt:.2f} s")
+        ti = time.time()
         if not output_type == "latent":
             # make sure the VAE is in float32 mode, as it overflows in float16
             needs_upcasting = self.vae.dtype == torch.float16 and self.vae.config.force_upcast
@@ -1889,8 +1914,9 @@ class StableDiffusionXLInpaintPipeline(
 
         # Offload all models
         self.maybe_free_model_hooks()
-
+        print(f"vae: {time.time() - ti:.2f} s")
         # if not return_dict:
+        # input()
         return (image,)
 
         # return StableDiffusionXLPipelineOutput(images=image)
