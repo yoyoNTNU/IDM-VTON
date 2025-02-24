@@ -19,7 +19,17 @@ import numpy as np
 from torchvision import transforms
 from detectron2.data.detection_utils import convert_PIL_to_numpy,_apply_exif_orientation
 from torchvision.transforms.functional import to_pil_image
+import pynvml
 
+
+def print_memory_usage(step_name=""):
+    pynvml.nvmlInit()
+    handle = pynvml.nvmlDeviceGetHandleByIndex(0)  # 取得 GPU 0
+    info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+    print(f"Windows 工作管理員顯示 VRAM: {info.used / 1024 ** 3:.1f} GB")
+
+
+print_memory_usage("-")
 ch = time.time()
 device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
 resolution = [720, 1280]
@@ -47,8 +57,9 @@ def pil_to_binary_mask(pil_image, threshold=0):
 
 
 # base_path = 'yisol/IDM-VTON'
-base_path = 'C://Users/cgal/Desktop/retrain_oursdataset/checkpoint-61360'
+base_path = 'C://Users/cgal/Desktop/9channel retrain/checkpoint-42390'
 example_path = os.path.join(os.path.dirname(__file__), 'example')
+torch.cuda.set_per_process_memory_fraction(14 / 24, 0)
 
 def init():
     unet = UNet2DConditionModel.from_pretrained(
@@ -113,7 +124,7 @@ def init():
 
 pipe, tensor_transform = init()
 pipe.to(device)
-
+print_memory_usage("load")
 
 def clean():
     torch.cuda.empty_cache()
@@ -141,22 +152,6 @@ def show_device():
         print(f'VAE is on: {d_vae}')
 
 
-
-def move2cpu():
-    if pipe.unet is not None:
-        pipe.unet.to('cpu')
-
-    if pipe.text_encoder is not None:
-        pipe.text_encoder.to('cpu')
-
-    if pipe.image_encoder is not None:
-        pipe.image_encoder.to('cpu')
-
-    if pipe.vae is not None:
-        pipe.vae.to('cpu')
-    torch.cuda.empty_cache()
-
-
 def move_model(is_move2cpu, model):
     if model == 'unet':
         if pipe.unet is not None:
@@ -182,13 +177,6 @@ def move_model(is_move2cpu, model):
     torch.cuda.empty_cache()
 
 
-def delete_all_tensor_on_gpu():
-    for obj in gc.get_objects():
-        if isinstance(obj, torch.Tensor) and obj.is_cuda:
-            del obj
-    torch.cuda.empty_cache()
-
-
 def gamma_curve_optimization(T, n, gamma):
     t = [i / (n - 1) for i in range(n)]
     t = t[::-1]
@@ -204,6 +192,7 @@ def gamma_curve_optimization(T, n, gamma):
 
 
 def start_tryon(dict_, garm_img_, denoise_steps_, seed_, gamma_):
+    print_memory_usage("初始化")
     gs = gamma_curve_optimization(980,denoise_steps_, gamma_ ** -1)
     start_time = time.time()
 
@@ -217,40 +206,42 @@ def start_tryon(dict_, garm_img_, denoise_steps_, seed_, gamma_):
     mask_gray = to_pil_image((mask_gray+1.0)/2.0)
     mask_time = time.time()
     print(f"preprocess-mask: {mask_time - start_time:.2f} s")
-
-    pose_img = Image.new('RGB', (resolution[0], resolution[1]), (0, 0, 0))
-
+    #
+    # pose_img = Image.new('RGB', (resolution[0], resolution[1]), (0, 0, 0))
+    #
     pose_time = time.time()
-    print(f"preprocess-pose: {pose_time - mask_time:.2f} s")
+    # print(f"preprocess-pose: {pose_time - mask_time:.2f} s")
     
     with torch.no_grad():
         with torch.cuda.amp.autocast():
             with torch.no_grad():
                 with torch.inference_mode():
-                    prompt_embeds = torch.zeros(1, 77, 2048)
-                    negative_prompt_embeds = torch.zeros(1, 77, 2048)
-                    pooled_prompt_embeds = torch.zeros(1, 1280)
-                    negative_pooled_prompt_embeds = torch.zeros(1, 1280)
-                    prompt_embeds_c = torch.zeros(1, 77, 2048)
+                    new_time = time.time()
+                    print(f"check time:{new_time - pose_time:.2f} s")
+                    prompt_embeds = torch.zeros(1, 77, 2048, device=device)
+                    negative_prompt_embeds = torch.zeros(1, 77, 2048, device=device)
+                    pooled_prompt_embeds = torch.zeros(1, 1280, device=device)
+                    negative_pooled_prompt_embeds = torch.zeros(1, 1280, device=device)
+                    prompt_embeds_c = torch.zeros(1, 77, 2048, device=device)
                     encode_prompt_time = time.time()
-                    print(f"preprocess-encode_prompt: {encode_prompt_time - pose_time:.2f} s")
+                    print(f"preprocess-encode_prompt: {encode_prompt_time - new_time:.2f} s")
 
-                    pose_img = tensor_transform(pose_img).unsqueeze(0).to(device, torch.float16)
+                    # pose_img = tensor_transform(pose_img).unsqueeze(0).to(device, torch.float16)
                     garm_tensor = tensor_transform(garm_img_).unsqueeze(0).to(device, torch.float16)
                     generator = torch.Generator(device).manual_seed(seed_) if seed_ is not None else None
                     move_time = time.time()
                     print(f"move to gpu: {move_time - encode_prompt_time:.2f} s")
+                    print_memory_usage("move to gpu")
                     if check_use_opt:
                         images = pipe(
                             timesteps=gs,
-                            prompt_embeds=prompt_embeds.to(device, torch.float16),
-                            negative_prompt_embeds=negative_prompt_embeds.to(device, torch.float16),
-                            pooled_prompt_embeds=pooled_prompt_embeds.to(device, torch.float16),
-                            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds.to(device, torch.float16),
+                            prompt_embeds=prompt_embeds.to(torch.float16),
+                            negative_prompt_embeds=negative_prompt_embeds.to(torch.float16),
+                            pooled_prompt_embeds=pooled_prompt_embeds.to(torch.float16),
+                            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds.to(torch.float16),
                             generator=generator,
                             strength=1.0,
-                            pose_img=pose_img,
-                            text_embeds_cloth=prompt_embeds_c.to(device, torch.float16),
+                            text_embeds_cloth=prompt_embeds_c.to(torch.float16),
                             cloth=garm_tensor,
                             mask_image=mask,
                             image=human_img,
@@ -261,15 +252,14 @@ def start_tryon(dict_, garm_img_, denoise_steps_, seed_, gamma_):
                         )[0]
                     else:
                         images = pipe(
-                            prompt_embeds=prompt_embeds.to(device,torch.float16),
-                            negative_prompt_embeds=negative_prompt_embeds.to(device,torch.float16),
-                            pooled_prompt_embeds=pooled_prompt_embeds.to(device,torch.float16),
-                            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds.to(device,torch.float16),
+                            prompt_embeds=prompt_embeds.to(torch.float16),
+                            negative_prompt_embeds=negative_prompt_embeds.to(torch.float16),
+                            pooled_prompt_embeds=pooled_prompt_embeds.to(torch.float16),
+                            negative_pooled_prompt_embeds=negative_pooled_prompt_embeds.to(torch.float16),
                             num_inference_steps=denoise_steps_,
                             generator=generator,
                             strength=1.0,
-                            pose_img=pose_img,
-                            text_embeds_cloth=prompt_embeds_c.to(device,torch.float16),
+                            text_embeds_cloth=prompt_embeds_c.to(torch.float16),
                             cloth=garm_tensor,
                             mask_image=mask,
                             image=human_img,
@@ -281,6 +271,7 @@ def start_tryon(dict_, garm_img_, denoise_steps_, seed_, gamma_):
 
     print(f"total: {time.time() - start_time:.2f} s")
     clean()
+    print_memory_usage("final")
     return images[0], mask_gray
 
 

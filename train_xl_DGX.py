@@ -62,27 +62,27 @@ class VitonHDDataset(data.Dataset):
         ) as file1:
             data1 = json.load(file1)
 
-        annotation_list = [
-            # "colors",
-            # "textures",
-            "sleeveLength",
-            "neckLine",
-            "item",
-        ]
+        # annotation_list = [
+        #     # "colors",
+        #     # "textures",
+        #     "sleeveLength",
+        #     "neckLine",
+        #     "item",
+        # ]
 
-        self.annotation_pair = {}
-        for k, v in data1.items():
-            for elem in v:
-                annotation_str = ""
-                for template in annotation_list:
-                    for tag in elem["tag_info"]:
-                        if (
-                            tag["tag_name"] == template
-                            and tag["tag_category"] is not None
-                        ):
-                            annotation_str += tag["tag_category"]
-                            annotation_str += " "
-                self.annotation_pair[elem["file_name"]] = annotation_str
+        # self.annotation_pair = {}
+        # for k, v in data1.items():
+        #     for elem in v:
+        #         annotation_str = ""
+        #         for template in annotation_list:
+        #             for tag in elem["tag_info"]:
+        #                 if (
+        #                     tag["tag_name"] == template
+        #                     and tag["tag_category"] is not None
+        #                 ):
+        #                     annotation_str += tag["tag_category"]
+        #                     annotation_str += " "
+        #         self.annotation_pair[elem["file_name"]] = annotation_str
 
 
         self.order = order
@@ -124,10 +124,10 @@ class VitonHDDataset(data.Dataset):
         c_name = self.c_names[index]
         im_name = self.im_names[index]
         # subject_txt = self.txt_preprocess['train']("shirt")
-        if c_name in self.annotation_pair:
-            cloth_annotation = self.annotation_pair[c_name]
-        else:
-            cloth_annotation = "shirts"
+        # if c_name in self.annotation_pair:
+        #     cloth_annotation = self.annotation_pair[c_name]
+        # else:
+        #     cloth_annotation = "shirts"
         
         cloth = Image.open(os.path.join(self.dataroot, self.phase, "cloth", c_name))
 
@@ -142,11 +142,11 @@ class VitonHDDataset(data.Dataset):
         mask = Image.open(os.path.join(self.dataroot, self.phase, "agnostic-mask", im_name.replace('.jpg','_mask.png'))).resize((self.width,self.height))
         mask = self.toTensor(mask)
         mask = mask[:1]
-        densepose_name = im_name
-        densepose_map = Image.open(
-            os.path.join(self.dataroot, self.phase, "image-densepose", densepose_name)
-        )
-        pose_img = self.toTensor(densepose_map)  # [-1,1]
+        # densepose_name = im_name
+        # densepose_map = Image.open(
+        #     os.path.join(self.dataroot, self.phase, "image-densepose", densepose_name)
+        # )
+        # pose_img = self.toTensor(densepose_map)  # [-1,1]
  
 
 
@@ -155,7 +155,7 @@ class VitonHDDataset(data.Dataset):
                 cloth = self.flip_transform(cloth)
                 mask = self.flip_transform(mask)
                 image = self.flip_transform(image)
-                pose_img = self.flip_transform(pose_img)
+                # pose_img = self.flip_transform(pose_img)
 
 
 
@@ -182,9 +182,9 @@ class VitonHDDataset(data.Dataset):
                 mask = transforms.functional.affine(
                     mask, angle=0, translate=[0, 0], scale=scale_val, shear=0
                 )
-                pose_img = transforms.functional.affine(
-                    pose_img, angle=0, translate=[0, 0], scale=scale_val, shear=0
-                )
+                # pose_img = transforms.functional.affine(
+                #     pose_img, angle=0, translate=[0, 0], scale=scale_val, shear=0
+                # )
 
 
 
@@ -205,16 +205,16 @@ class VitonHDDataset(data.Dataset):
                     scale=1,
                     shear=0,
                 )
-                pose_img = transforms.functional.affine(
-                    pose_img,
-                    angle=0,
-                    translate=[
-                        shift_valx * pose_img.shape[-1],
-                        shift_valy * pose_img.shape[-2],
-                    ],
-                    scale=1,
-                    shear=0,
-                )
+                # pose_img = transforms.functional.affine(
+                #     pose_img,
+                #     angle=0,
+                #     translate=[
+                #         shift_valx * pose_img.shape[-1],
+                #         shift_valy * pose_img.shape[-2],
+                #     ],
+                #     scale=1,
+                #     shear=0,
+                # )
 
 
 
@@ -229,7 +229,7 @@ class VitonHDDataset(data.Dataset):
 
         im_mask = image * mask
 
-        pose_img =  self.norm(pose_img)
+        # pose_img =  self.norm(pose_img)
 
 
         result = {}
@@ -239,10 +239,10 @@ class VitonHDDataset(data.Dataset):
         result["cloth_pure"] = self.transform(cloth)
         result["inpaint_mask"] = 1-mask
         result["im_mask"] = im_mask
-        result["caption"] = ""
-        result["caption_cloth"] = ""
-        result["annotation"] = ""
-        result["pose_img"] = pose_img
+        # result["caption"] = ""
+        # result["caption_cloth"] = ""
+        # result["annotation"] = ""
+        # result["pose_img"] = pose_img
 
 
         return result
@@ -324,10 +324,10 @@ def main():
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler",rescale_betas_zero_snr=True)
-    tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer")
-    text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder")
-    tokenizer_2 = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer_2")
-    text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(args.pretrained_model_name_or_path,subfolder="text_encoder_2")
+    # tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer")
+    # text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder")
+    # tokenizer_2 = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer_2")
+    # text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(args.pretrained_model_name_or_path,subfolder="text_encoder_2")
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae",torch_dtype=torch.float16, )
     unet_encoder = UNet2DConditionModel_ref.from_pretrained(args.pretrained_garmentnet_path, subfolder="unet")
     unet_encoder.config.addition_embed_type = None
@@ -341,9 +341,7 @@ def main():
     unet.config["encoder_hid_dim"] = image_encoder.config.hidden_size
     unet.config["encoder_hid_dim_type"] = "ip_image_proj"
 
-
     state_dict = torch.load(args.pretrained_ip_adapter_path, map_location="cpu")
- 
  
     adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
     adapter_modules.load_state_dict(state_dict["ip_adapter"],strict=False)
@@ -365,21 +363,26 @@ def main():
 
     unet.encoder_hid_proj = image_proj_model
 
-    conv_new = torch.nn.Conv2d(
-        in_channels=4+4+1+4,
-        out_channels=unet.conv_in.out_channels,
-        kernel_size=3,
-        padding=1,
-    )
-    torch.nn.init.kaiming_normal_(conv_new.weight)  
-    conv_new.weight.data = conv_new.weight.data * 0.  
+    # conv_new = torch.nn.Conv2d(
+    #     in_channels=4+4+1+4,
+    #     out_channels=unet.conv_in.out_channels,
+    #     kernel_size=3,
+    #     padding=1,
+    # )
+    # torch.nn.init.kaiming_normal_(conv_new.weight)
+    # conv_new.weight.data = conv_new.weight.data * 0.
+    #
+    # conv_new.weight.data[:, :9] = unet.conv_in.weight.data
+    # conv_new.bias.data = unet.conv_in.bias.data
+    #
+    # unet.conv_in = conv_new  # replace conv layer in unet
+    # unet.config['in_channels'] = 13  # update config
+    # unet.config.in_channels = 13  # update config
+    unet.config['mid_block_type'] = None
+    unet.config.mid_block_type = None
+    unet_encoder.config['mid_block_type'] = None
+    unet_encoder.config.mid_block_type = None
 
-    conv_new.weight.data[:, :9] = unet.conv_in.weight.data
-    conv_new.bias.data = unet.conv_in.bias.data  
-
-    unet.conv_in = conv_new  # replace conv layer in unet
-    unet.config['in_channels'] = 13  # update config
-    unet.config.in_channels = 13  # update config
     #customize unet end
 
 
@@ -389,28 +392,24 @@ def main():
     elif accelerator.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
     vae.to(accelerator.device, dtype=weight_dtype)
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
-    text_encoder_2.to(accelerator.device, dtype=weight_dtype)
+    # text_encoder.to(accelerator.device, dtype=weight_dtype)
+    # text_encoder_2.to(accelerator.device, dtype=weight_dtype)
     image_encoder.to(accelerator.device, dtype=weight_dtype)
     unet_encoder.to(accelerator.device, dtype=weight_dtype)
 
-    print(f"VAE is on: {vae.device}")
-    print(f"Text Encoder is on: {text_encoder.device}")
-    print(f"Text Encoder 2 is on: {text_encoder_2.device}")
-    print(f"UNet Encoder is on: {unet_encoder.device}")
-    print(f"Image Encoder is on: {image_encoder.device}")
-    get_gpu_memory()
-
+    # print(f"VAE is on: {vae.device}")
+    # print(f"Text Encoder is on: {text_encoder.device}")
+    # print(f"Text Encoder 2 is on: {text_encoder_2.device}")
+    # print(f"UNet Encoder is on: {unet_encoder.device}")
+    # print(f"Image Encoder is on: {image_encoder.device}")
+    # get_gpu_memory()
 
     vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
-    text_encoder_2.requires_grad_(False)
+    # text_encoder.requires_grad_(False)
+    # text_encoder_2.requires_grad_(False)
     image_encoder.requires_grad_(False)
     unet_encoder.requires_grad_(False)
     unet.requires_grad_(True)
-
-
-
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
@@ -494,7 +493,7 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-    get_gpu_memory()
+    # get_gpu_memory()
     # Train!
     progress_bar = tqdm(
         range(0, args.max_train_steps),
@@ -519,90 +518,97 @@ def main():
                                     unet=unwrapped_unet,
                                     vae= vae,
                                     scheduler=noise_scheduler,
-                                    tokenizer=tokenizer,
-                                    tokenizer_2=tokenizer_2,
-                                    text_encoder=text_encoder,
-                                    text_encoder_2=text_encoder_2,
+                                    tokenizer=None,
+                                    tokenizer_2=None,
+                                    text_encoder=None,
+                                    text_encoder_2=None,
                                     image_encoder=image_encoder,
                                     unet_encoder = unet_encoder,
                                     torch_dtype=torch.float16,
                                     add_watermarker=False,
                                     safety_checker=None,
                                 ).to(accelerator.device)
-                                print(f"VAE is on: {vae.device}")
-                                print(f"Text Encoder is on: {text_encoder.device}")
-                                print(f"Text Encoder 2 is on: {text_encoder_2.device}")
-                                print(f"UNet Encoder is on: {unet_encoder.device}")
-                                print(f"Image Encoder is on: {image_encoder.device}")
-                                get_gpu_memory()
+                                # print(f"VAE is on: {vae.device}")
+                                # print(f"Text Encoder is on: {text_encoder.device}")
+                                # print(f"Text Encoder 2 is on: {text_encoder_2.device}")
+                                # print(f"UNet Encoder is on: {unet_encoder.device}")
+                                # print(f"Image Encoder is on: {image_encoder.device}")
+                                # get_gpu_memory()
                                 with torch.no_grad():
                                     for sample in test_dataloader:
                                         img_emb_list = []
                                         for i in range(sample['cloth'].shape[0]):
                                             img_emb_list.append(sample['cloth'][i])
 
-                                        prompt = sample["caption"]
+                                        # prompt = sample["caption"]
 
                                         num_prompts = sample['cloth'].shape[0]                                        
-                                        negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
+                                        # negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
 
-                                        if not isinstance(prompt, List):
-                                            prompt = [prompt] * num_prompts
-                                        if not isinstance(negative_prompt, List):
-                                            negative_prompt = [negative_prompt] * num_prompts
+                                        # if not isinstance(prompt, List):
+                                        #     prompt = [prompt] * num_prompts
+                                        # if not isinstance(negative_prompt, List):
+                                        #     negative_prompt = [negative_prompt] * num_prompts
 
                                         image_embeds = torch.cat(img_emb_list,dim=0)
 
 
                                         with torch.inference_mode():
-                                            (
-                                                prompt_embeds,
-                                                negative_prompt_embeds,
-                                                pooled_prompt_embeds,
-                                                negative_pooled_prompt_embeds,
-                                            ) = newpipe.encode_prompt(
-                                                prompt,
-                                                num_images_per_prompt=1,
-                                                do_classifier_free_guidance=True,
-                                                negative_prompt=negative_prompt,
-                                            )
+                                            # (
+                                            #     prompt_embeds,
+                                            #     negative_prompt_embeds,
+                                            #     pooled_prompt_embeds,
+                                            #     negative_pooled_prompt_embeds,
+                                            # ) = newpipe.encode_prompt(
+                                            #     prompt,
+                                            #     num_images_per_prompt=1,
+                                            #     do_classifier_free_guidance=True,
+                                            #     negative_prompt=negative_prompt,
+                                            # )
                                         
                                         
-                                            prompt = sample["caption_cloth"]
-                                            negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
+                                            # prompt = sample["caption_cloth"]
+                                            # negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
 
-                                            if not isinstance(prompt, List):
-                                                prompt = [prompt] * num_prompts
-                                            if not isinstance(negative_prompt, List):
-                                                negative_prompt = [negative_prompt] * num_prompts
-
-
-                                            with torch.inference_mode():
-                                                (
-                                                    prompt_embeds_c,
-                                                    _,
-                                                    _,
-                                                    _,
-                                                ) = newpipe.encode_prompt(
-                                                    prompt,
-                                                    num_images_per_prompt=1,
-                                                    do_classifier_free_guidance=False,
-                                                    negative_prompt=negative_prompt,
-                                                )
-                                            
+                                            # if not isinstance(prompt, List):
+                                            #     prompt = [prompt] * num_prompts
+                                            # if not isinstance(negative_prompt, List):
+                                            #     negative_prompt = [negative_prompt] * num_prompts
 
 
+                                            # with torch.inference_mode():
+                                            #     (
+                                            #         prompt_embeds_c,
+                                            #         _,
+                                            #         _,
+                                            #         _,
+                                            #     ) = newpipe.encode_prompt(
+                                            #         prompt,
+                                            #         num_images_per_prompt=1,
+                                            #         do_classifier_free_guidance=False,
+                                            #         negative_prompt=negative_prompt,
+                                            #     )
+                                            prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
+                                            negative_prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
+                                            pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
+                                            negative_pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
+                                            prompt_embeds_c = torch.zeros(args.test_batch_size, 77, 2048)
                                             generator = torch.Generator(newpipe.device).manual_seed(args.seed) if args.seed is not None else None
+                                            # print('p:',prompt_embeds.shape)
+                                            # print('n:',negative_prompt_embeds.shape)
+                                            # print('pp:',pooled_prompt_embeds.shape)
+                                            # print('np:',negative_pooled_prompt_embeds.shape)
+                                            # print('t:',prompt_embeds_c.shape)
                                             images = newpipe(
-                                                prompt_embeds=prompt_embeds,
-                                                negative_prompt_embeds=negative_prompt_embeds,
-                                                pooled_prompt_embeds=pooled_prompt_embeds,
-                                                negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
+                                                prompt_embeds=prompt_embeds.to(accelerator.device),
+                                                negative_prompt_embeds=negative_prompt_embeds.to(accelerator.device),
+                                                pooled_prompt_embeds=pooled_prompt_embeds.to(accelerator.device),
+                                                negative_pooled_prompt_embeds=negative_pooled_prompt_embeds.to(accelerator.device),
                                                 num_inference_steps=args.num_inference_steps,
                                                 generator=generator,
                                                 strength=1.0,
-                                                pose_img=F.interpolate(sample['pose_img'], size=(args.height, args.width), mode="bilinear", align_corners=False),
-                                                text_embeds_cloth=prompt_embeds_c,
+                                                # pose_img=F.interpolate(sample['pose_img'], size=(args.height, args.width), mode="bilinear", align_corners=False),
+                                                text_embeds_cloth=prompt_embeds_c.to(accelerator.device),
                                                 cloth=sample["cloth_pure"].to(newpipe.device),
                                                 mask_image=sample['inpaint_mask'],
                                                 image=(sample['image']+1.0)/2.0, 
@@ -618,8 +624,6 @@ def main():
                         del unwrapped_unet
                         del newpipe                
                         torch.cuda.empty_cache()
-
-
 
                 pixel_values = batch["image"].to(dtype=vae.dtype)
                 model_input = vae.encode(pixel_values).latent_dist.sample()
@@ -639,9 +643,9 @@ def main():
                 )
                 mask = mask.reshape(-1, 1, args.height // 8, args.width // 8)
 
-                pose_map = vae.encode(batch["pose_img"].to(dtype=vae.dtype)).latent_dist.sample()
-                pose_map = pose_map * vae.config.scaling_factor
-                pose_map = F.interpolate(pose_map, size=(args.height // 8, args.width // 8), mode="bilinear", align_corners=False)
+                # pose_map = vae.encode(batch["pose_img"].to(dtype=vae.dtype)).latent_dist.sample()
+                # pose_map = pose_map * vae.config.scaling_factor
+                # pose_map = F.interpolate(pose_map, size=(args.height // 8, args.width // 8), mode="bilinear", align_corners=False)
 
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(model_input)
@@ -652,31 +656,36 @@ def main():
                     )
                 # Add noise to the latents according to the noise magnitude at each timestep
                 noisy_latents = noise_scheduler.add_noise(model_input, noise, timesteps)
-                latent_model_input = torch.cat([noisy_latents, mask,masked_latents,pose_map], dim=1)
+                # latent_model_input = torch.cat([noisy_latents, mask,masked_latents,pose_map], dim=1)
+                latent_model_input = torch.cat([noisy_latents, mask, masked_latents], dim=1)
             
-            
-                text_input_ids = tokenizer(
-                    batch['caption'],
-                    max_length=tokenizer.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
-                text_input_ids_2 = tokenizer_2(
-                    batch['caption'],
-                    max_length=tokenizer_2.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
+                # text_input_ids = tokenizer(
+                #     batch['caption'],
+                #     max_length=tokenizer.model_max_length,
+                #     padding="max_length",
+                #     truncation=True,
+                #     return_tensors="pt"
+                # ).input_ids
+                # text_input_ids_2 = tokenizer_2(
+                #     batch['caption'],
+                #     max_length=tokenizer_2.model_max_length,
+                #     padding="max_length",
+                #     truncation=True,
+                #     return_tensors="pt"
+                # ).input_ids
 
-                encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
-                text_embeds = encoder_output.hidden_states[-2]
-                encoder_output_2 = text_encoder_2(text_input_ids_2.to(accelerator.device), output_hidden_states=True)
-                pooled_text_embeds = encoder_output_2[0]
-                text_embeds_2 = encoder_output_2.hidden_states[-2]
-                encoder_hidden_states = torch.concat([text_embeds, text_embeds_2], dim=-1) # concat
-
+                # encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
+                # text_embeds = encoder_output.hidden_states[-2]
+                # encoder_output_2 = text_encoder_2(text_input_ids_2.to(accelerator.device), output_hidden_states=True)
+                # pooled_text_embeds = encoder_output_2[0]
+                # text_embeds_2 = encoder_output_2.hidden_states[-2]
+                # encoder_hidden_states = torch.concat([text_embeds, text_embeds_2], dim=-1) # concat
+                encoder_hidden_states = torch.zeros(args.train_batch_size, 77, 2048).to(accelerator.device,dtype=vae.dtype)
+                pooled_text_embeds = torch.zeros(args.train_batch_size, 1280).to(accelerator.device,dtype=vae.dtype)
+                # print('te:', text_embeds.shape)
+                # print('te2:', text_embeds_2.shape)
+                # print('pt:', pooled_text_embeds.shape)
+                # print('ehs:',encoder_hidden_states.shape)
 
                 def compute_time_ids(original_size, crops_coords_top_left = (0,0)):
                     # Adapted from pipeline.StableDiffusionXLPipeline._get_add_time_ids
@@ -697,8 +706,6 @@ def main():
                 image_embeds = torch.cat(img_emb_list,dim=0)
                 image_embeds = image_encoder(image_embeds, output_hidden_states=True).hidden_states[-2]
                 ip_tokens =image_proj_model(image_embeds)
-            
-
 
                 # add cond
                 unet_added_cond_kwargs = {"text_embeds": pooled_text_embeds, "time_ids": add_time_ids}
@@ -708,35 +715,34 @@ def main():
                 cloth_values = vae.encode(cloth_values).latent_dist.sample()
                 cloth_values = cloth_values * vae.config.scaling_factor
 
+                # text_input_ids = tokenizer(
+                #     batch['caption_cloth'],
+                #     max_length=tokenizer.model_max_length,
+                #     padding="max_length",
+                #     truncation=True,
+                #     return_tensors="pt"
+                # ).input_ids
+                # text_input_ids_2 = tokenizer_2(
+                #     batch['caption_cloth'],
+                #     max_length=tokenizer_2.model_max_length,
+                #     padding="max_length",
+                #     truncation=True,
+                #     return_tensors="pt"
+                # ).input_ids
 
-                text_input_ids = tokenizer(
-                    batch['caption_cloth'],
-                    max_length=tokenizer.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
-                text_input_ids_2 = tokenizer_2(
-                    batch['caption_cloth'],
-                    max_length=tokenizer_2.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
+                # encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
+                # text_embeds_cloth = encoder_output.hidden_states[-2]
+                # encoder_output_2 = text_encoder_2(text_input_ids_2.to(accelerator.device), output_hidden_states=True)
+                # text_embeds_2_cloth = encoder_output_2.hidden_states[-2]
+                # text_embeds_cloth = torch.concat([text_embeds_cloth, text_embeds_2_cloth], dim=-1) # concat
+                text_embeds_cloth = torch.zeros(args.train_batch_size, 77, 2048).to(accelerator.device,dtype=vae.dtype)
+                # print('te:',text_embeds_cloth.shape)
+                # print('te2:',text_embeds_2_cloth.shape)
 
-            
-                encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
-                text_embeds_cloth = encoder_output.hidden_states[-2]
-                encoder_output_2 = text_encoder_2(text_input_ids_2.to(accelerator.device), output_hidden_states=True)
-                text_embeds_2_cloth = encoder_output_2.hidden_states[-2]
-                text_embeds_cloth = torch.concat([text_embeds_cloth, text_embeds_2_cloth], dim=-1) # concat
-
-
-                down,reference_features = unet_encoder(cloth_values,timesteps, text_embeds_cloth,return_dict=False)
+                down,reference_features = unet_encoder(cloth_values, timesteps, text_embeds_cloth, return_dict=False)
                 reference_features = list(reference_features)
 
                 noise_pred = unet(latent_model_input, timesteps, encoder_hidden_states,added_cond_kwargs=unet_added_cond_kwargs,garment_features=reference_features).sample
-
 
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
@@ -806,10 +812,10 @@ def main():
                     unet=unwrapped_unet,
                     vae= vae,
                     scheduler=noise_scheduler,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
+                    tokenizer=None,
+                    tokenizer_2=None,
+                    text_encoder=None,
+                    text_encoder_2=None,
                     image_encoder=image_encoder,
                     unet_encoder=unet_encoder,
                     torch_dtype=torch.float16,
