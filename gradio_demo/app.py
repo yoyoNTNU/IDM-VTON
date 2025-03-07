@@ -57,9 +57,8 @@ def pil_to_binary_mask(pil_image, threshold=0):
 
 
 # base_path = 'yisol/IDM-VTON'
-base_path = 'C://Users/cgal/Desktop/9channel retrain/checkpoint-42390'
+base_path = 'C://Users/cgal/Desktop/9channel retrain/checkpoint-61360'
 example_path = os.path.join(os.path.dirname(__file__), 'example')
-torch.cuda.set_per_process_memory_fraction(14 / 24, 0)
 
 def init():
     unet = UNet2DConditionModel.from_pretrained(
@@ -123,6 +122,47 @@ def init():
 
 
 pipe, tensor_transform = init()
+# print(pipe.unet)
+# print()
+# print(pipe.unet_encoder)
+# for name, module in pipe.unet_encoder.named_children():
+#     if name == "up_blocks" or name == "down_blocks":
+#         for na, sm in module.named_children():
+#             for nam, sm1 in sm.named_children():
+#                 for final, sss in sm1.named_children():
+#                     total = 0
+#                     for names, param in sss.named_parameters():
+#                         num_params = param.numel()  # 參數數量
+#                         total += num_params
+#                     print(f"{nam}: {total}")
+# to = 0
+# for name, param in pipe.unet_encoder.named_parameters():
+#     num_params = param.numel()  # 參數數量
+#     to += num_params
+# print(f"garment unet: {to}")
+# print("")
+# for name, module in pipe.unet.named_children():
+#     if name == "up_blocks" or name == "down_blocks":
+#         for na, sm in module.named_children():
+#             for nam, sm1 in sm.named_children():
+#                 for final, sss in sm1.named_children():
+#                     total = 0
+#                     for names, param in sss.named_parameters():
+#                         num_params = param.numel()  # 參數數量
+#                         total += num_params
+#                     print(f"{nam}: {total}")
+#     else:
+#         k = 0
+#         for names, param in module.named_parameters():
+#             num_params = param.numel()
+#             k += num_params
+#         print(f"{name}: {k}")
+#
+# to = 0
+# for name, param in pipe.unet.named_parameters():
+#     num_params = param.numel()  # 參數數量
+#     to += num_params
+# print(f"tryon unet: {to}")
 pipe.to(device)
 print_memory_usage("load")
 
@@ -177,23 +217,18 @@ def move_model(is_move2cpu, model):
     torch.cuda.empty_cache()
 
 
-def gamma_curve_optimization(T, n, gamma):
+def gamma_curve_optimization(n, gamma):
     t = [i / (n - 1) for i in range(n)]
     t = t[::-1]
-    if gamma >= 1:
-        tl = 0
-        tu = T + 30 * (gamma - 1)
-    else:
-        tl = 30 * (1 - 1 / gamma)
-        tu = T
-    t = [(T * t_val - tl) / (tu - tl) for t_val in t]
-    t = [int(T * (t_val ** gamma) + 1) for t_val in t]
+    tl = 1
+    tu = 1 + int(1000 / n) * (n - 1)
+    t = [int((tu-tl) * (t_val ** gamma) + 1) for t_val in t]
     return t
 
 
 def start_tryon(dict_, garm_img_, denoise_steps_, seed_, gamma_):
     print_memory_usage("初始化")
-    gs = gamma_curve_optimization(980,denoise_steps_, gamma_ ** -1)
+    gs = gamma_curve_optimization(denoise_steps_, gamma_ ** -1)
     start_time = time.time()
 
     garm_img_ = garm_img_.convert("RGB").resize((resolution[0], resolution[1]))
@@ -304,7 +339,7 @@ with image_blocks as demo:
             with gr.Row():
                 denoise_steps = gr.Number(label="Denoising Steps", minimum=5, maximum=50, value=10, step=1)
                 seed = gr.Number(label="Seed", minimum=-1, maximum=2147483647, step=1, value=42)
-                gamma = gr.Number(label="gamma", minimum=1, maximum=4, step=0.1, value=2)
+                gamma = gr.Number(label="gamma", minimum=1, maximum=10, step=0.1, value=2)
     radio = gr.Radio(choices=["720x1280", "360x640"], label="Resolution", value="720x1280")
     with gr.Row():
         show_button = gr.Button(value="Show Device")

@@ -19,7 +19,7 @@ from src.tryon_pipeline import StableDiffusionXLInpaintPipeline as TryonPipeline
 
 from ip_adapter.ip_adapter import Resampler
 from diffusers.utils.import_utils import is_xformers_available
-from typing import Literal, Tuple,List
+from typing import Literal, Tuple, List
 import torch.utils.data as data
 import math
 from tqdm.auto import tqdm
@@ -44,7 +44,6 @@ class VitonHDDataset(data.Dataset):
         self.width = size[1]
         self.size = size
 
-
         self.norm = transforms.Normalize([0.5], [0.5])
         self.transform = transforms.Compose(
             [
@@ -58,32 +57,9 @@ class VitonHDDataset(data.Dataset):
         self.toTensor = transforms.ToTensor()
 
         with open(
-            os.path.join(dataroot_path, phase, "vitonhd_" + phase + "_tagged.json"), "r"
+                os.path.join(dataroot_path, phase, "vitonhd_" + phase + "_tagged.json"), "r"
         ) as file1:
             data1 = json.load(file1)
-
-        annotation_list = [
-            # "colors",
-            # "textures",
-            "sleeveLength",
-            "neckLine",
-            "item",
-        ]
-
-        self.annotation_pair = {}
-        for k, v in data1.items():
-            for elem in v:
-                annotation_str = ""
-                for template in annotation_list:
-                    for tag in elem["tag_info"]:
-                        if (
-                            tag["tag_name"] == template
-                            and tag["tag_category"] is not None
-                        ):
-                            annotation_str += tag["tag_category"]
-                            annotation_str += " "
-                self.annotation_pair[elem["file_name"]] = annotation_str
-
 
         self.order = order
 
@@ -92,7 +68,6 @@ class VitonHDDataset(data.Dataset):
         im_names = []
         c_names = []
         dataroot_names = []
-
 
         if phase == "train":
             filename = os.path.join(dataroot_path, f"{phase}_pairs.txt")
@@ -123,46 +98,32 @@ class VitonHDDataset(data.Dataset):
     def __getitem__(self, index):
         c_name = self.c_names[index]
         im_name = self.im_names[index]
-        # subject_txt = self.txt_preprocess['train']("shirt")
-        if c_name in self.annotation_pair:
-            cloth_annotation = self.annotation_pair[c_name]
-        else:
-            cloth_annotation = "shirts"
-        
         cloth = Image.open(os.path.join(self.dataroot, self.phase, "cloth", c_name))
 
         im_pil_big = Image.open(
             os.path.join(self.dataroot, self.phase, "image", im_name)
-        ).resize((self.width,self.height))
+        ).resize((self.width, self.height))
 
         image = self.transform(im_pil_big)
         # load parsing image
 
-
-        mask = Image.open(os.path.join(self.dataroot, self.phase, "agnostic-mask", im_name.replace('.jpg','_mask.png'))).resize((self.width,self.height))
+        mask = Image.open(
+            os.path.join(self.dataroot, self.phase, "agnostic-mask", im_name.replace('.jpg', '_mask.png'))).resize(
+            (self.width, self.height))
         mask = self.toTensor(mask)
         mask = mask[:1]
-        densepose_name = im_name
-        densepose_map = Image.open(
-            os.path.join(self.dataroot, self.phase, "image-densepose", densepose_name)
-        )
-        pose_img = self.toTensor(densepose_map)  # [-1,1]
- 
-
 
         if self.phase == "train":
             if random.random() > 0.5:
                 cloth = self.flip_transform(cloth)
                 mask = self.flip_transform(mask)
                 image = self.flip_transform(image)
-                pose_img = self.flip_transform(pose_img)
 
-
-
-            if random.random()>0.5:
+            if random.random() > 0.5:
                 color_jitter = transforms.ColorJitter(brightness=0.5, contrast=0.3, saturation=0.5, hue=0.5)
-                fn_idx, b, c, s, h = transforms.ColorJitter.get_params(color_jitter.brightness, color_jitter.contrast, color_jitter.saturation,color_jitter.hue)
-                
+                fn_idx, b, c, s, h = transforms.ColorJitter.get_params(color_jitter.brightness, color_jitter.contrast,
+                                                                       color_jitter.saturation, color_jitter.hue)
+
                 image = TF.adjust_contrast(image, c)
                 image = TF.adjust_brightness(image, b)
                 image = TF.adjust_hue(image, h)
@@ -173,7 +134,6 @@ class VitonHDDataset(data.Dataset):
                 cloth = TF.adjust_hue(cloth, h)
                 cloth = TF.adjust_saturation(cloth, s)
 
-              
             if random.random() > 0.5:
                 scale_val = random.uniform(0.8, 1.2)
                 image = transforms.functional.affine(
@@ -182,11 +142,6 @@ class VitonHDDataset(data.Dataset):
                 mask = transforms.functional.affine(
                     mask, angle=0, translate=[0, 0], scale=scale_val, shear=0
                 )
-                pose_img = transforms.functional.affine(
-                    pose_img, angle=0, translate=[0, 0], scale=scale_val, shear=0
-                )
-
-
 
             if random.random() > 0.5:
                 shift_valx = random.uniform(-0.2, 0.2)
@@ -205,31 +160,15 @@ class VitonHDDataset(data.Dataset):
                     scale=1,
                     shear=0,
                 )
-                pose_img = transforms.functional.affine(
-                    pose_img,
-                    angle=0,
-                    translate=[
-                        shift_valx * pose_img.shape[-1],
-                        shift_valy * pose_img.shape[-2],
-                    ],
-                    scale=1,
-                    shear=0,
-                )
 
+        mask = 1 - mask
 
-
-
-        mask = 1-mask
-
-        cloth_trim =  self.clip_processor(images=cloth, return_tensors="pt").pixel_values
-
+        cloth_trim = self.clip_processor(images=cloth, return_tensors="pt").pixel_values
 
         mask[mask < 0.5] = 0
         mask[mask >= 0.5] = 1
 
         im_mask = image * mask
-
-        pose_img =  self.norm(pose_img)
 
 
         result = {}
@@ -237,20 +176,13 @@ class VitonHDDataset(data.Dataset):
         result["image"] = image
         result["cloth"] = cloth_trim
         result["cloth_pure"] = self.transform(cloth)
-        result["inpaint_mask"] = 1-mask
+        result["inpaint_mask"] = 1 - mask
         result["im_mask"] = im_mask
-        result["caption"] = ""
-        result["caption_cloth"] = ""
-        result["annotation"] = ""
-        result["pose_img"] = pose_img
-
 
         return result
 
     def __len__(self):
         return len(self.im_names)
-
-
 
 
 def parse_args():
@@ -279,15 +211,16 @@ def parse_args():
     parser.add_argument("--enable_xformers_memory_efficient_attention", action="store_true", help="Whether or not to use xformers.")
     parser.add_argument("--mixed_precision",type=str,default=None,choices=["no", "fp16", "bf16"],help=("Whether to use mixed precision. Choose between fp16 and bf16 (bfloat16). Bf16 requires PyTorch >="" 1.10.and an Nvidia Ampere GPU.  Default to the value of accelerate config of the current system or the"" flag passed with the `accelerate.launch` command. Use this argument to override the accelerate config."),)
     parser.add_argument("--guidance_scale",type=float,default=2.0,)
-    parser.add_argument("--seed", type=int, default=42,)    
-    parser.add_argument("--num_inference_steps",type=int,default=30,)    
+    parser.add_argument("--seed", type=int, default=42,)
+    parser.add_argument("--num_inference_steps",type=int,default=30,)
     parser.add_argument("--adam_beta1", type=float, default=0.9, help="The beta1 parameter for the Adam optimizer.")
     parser.add_argument("--adam_beta2", type=float, default=0.999, help="The beta2 parameter for the Adam optimizer.")
     parser.add_argument("--adam_weight_decay", type=float, default=1e-2, help="Weight decay to use.")
     parser.add_argument("--adam_epsilon", type=float, default=1e-08, help="Epsilon value for the Adam optimizer")
     parser.add_argument("--local_rank", type=int, default=-1, help="For distributed training: local_rank")
-    parser.add_argument("--data_dir", type=str, default="/home/omnious/workspace/yisol/Dataset/VITON-HD/zalando", help="For distributed training: local_rank")
-    
+    parser.add_argument("--data_dir", type=str, default="/home/omnious/workspace/yisol/Dataset/VITON-HD/zalando",
+                        help="For distributed training: local_rank")
+
     args = parser.parse_args()
     env_local_rank = int(os.environ.get("LOCAL_RANK", -1))
     if env_local_rank != -1 and env_local_rank != args.local_rank:
@@ -324,25 +257,19 @@ def main():
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler",rescale_betas_zero_snr=True,local_files_only=True)
-    tokenizer = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer",local_files_only=True)
-    text_encoder = CLIPTextModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="text_encoder",local_files_only=True)
-    tokenizer_2 = CLIPTokenizer.from_pretrained(args.pretrained_model_name_or_path, subfolder="tokenizer_2",local_files_only=True)
-    text_encoder_2 = CLIPTextModelWithProjection.from_pretrained(args.pretrained_model_name_or_path,subfolder="text_encoder_2",local_files_only=True)
-    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae",torch_dtype=torch.float16,local_files_only=True)
-    unet_encoder = UNet2DConditionModel_ref.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet_encoder",local_files_only=True)
-    image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.pretrained_model_name_or_path, subfolder="image_encoder",local_files_only=True)
-
-    #customize unet start
-    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None,local_files_only=True)
+    vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", torch_dtype=torch.float16,local_files_only=True)
+    unet_encoder = UNet2DConditionModel_ref.from_pretrained(args.pretrained_model_name_or_path,subfolder="unet_encoder",local_files_only=True)
+    image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.pretrained_model_name_or_path,subfolder="image_encoder",local_files_only=True)
+    unet = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None, local_files_only=True)
 
     state_dict = torch.load(args.pretrained_ip_adapter_path, map_location="cpu")
- 
- 
-    # adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
-    # adapter_modules.load_state_dict(state_dict["ip_adapter"],strict=False)
 
-    #ip-adapter
+    # adapter_modules = torch.nn.ModuleList(unet.attn_processors.values())
+    # adapter_modules.load_state_dict(state_dict["ip_adapter"], strict=False)
+
+    # ip-adapter
     image_proj_model = unet.encoder_hid_proj.to(accelerator.device, dtype=torch.float32)
+    image_proj_model.requires_grad_(True)
 
     weight_dtype = torch.float32
     if accelerator.mixed_precision == "fp16":
@@ -350,28 +277,14 @@ def main():
     elif accelerator.mixed_precision == "bf16":
         weight_dtype = torch.bfloat16
     vae.to(accelerator.device, dtype=weight_dtype)
-    text_encoder.to(accelerator.device, dtype=weight_dtype)
-    text_encoder_2.to(accelerator.device, dtype=weight_dtype)
     image_encoder.to(accelerator.device, dtype=weight_dtype)
     unet_encoder.to(accelerator.device, dtype=weight_dtype)
 
-    print(f"VAE is on: {vae.device}")
-    print(f"Text Encoder is on: {text_encoder.device}")
-    print(f"Text Encoder 2 is on: {text_encoder_2.device}")
-    print(f"UNet Encoder is on: {unet_encoder.device}")
-    print(f"Image Encoder is on: {image_encoder.device}")
-    get_gpu_memory()
-
 
     vae.requires_grad_(False)
-    text_encoder.requires_grad_(False)
-    text_encoder_2.requires_grad_(False)
     image_encoder.requires_grad_(False)
     unet_encoder.requires_grad_(False)
     unet.requires_grad_(True)
-
-
-
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
@@ -380,7 +293,7 @@ def main():
             unet.enable_xformers_memory_efficient_attention()
         else:
             raise ValueError("xformers is not available. Make sure it is installed correctly")
-    
+
     if args.gradient_checkpointing:
         unet.enable_gradient_checkpointing()
         unet_encoder.enable_gradient_checkpointing()
@@ -400,7 +313,6 @@ def main():
 
     params_to_opt = itertools.chain(unet.parameters())
 
-
     optimizer = optimizer_class(
         params_to_opt,
         lr=args.learning_rate,
@@ -408,7 +320,7 @@ def main():
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
-    
+
     train_dataset = VitonHDDataset(
         dataroot_path=args.data_dir,
         phase="train",
@@ -441,11 +353,7 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
 
-
-    unet,optimizer,train_dataloader,test_dataloader = accelerator.prepare(unet,optimizer,train_dataloader,test_dataloader)
-    # image_proj_model= accelerator.prepare(image_proj_model)
-    # unet_encoder = accelerator.prepare(unet_encoder)
-    # image_encoder = accelerator.prepare(image_encoder)
+    unet, optimizer, train_dataloader, test_dataloader = accelerator.prepare(unet,optimizer,train_dataloader,test_dataloader)
 
     initial_global_step = 0
 
@@ -455,7 +363,7 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
-    get_gpu_memory()
+    # get_gpu_memory()
     # Train!
     progress_bar = tqdm(
         range(0, args.max_train_steps),
@@ -466,7 +374,7 @@ def main():
     )
     global_step = 0
     first_epoch = 0
-    train_loss=0.0
+    train_loss = 0.0
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(unet), accelerator.accumulate(image_proj_model):
@@ -474,100 +382,51 @@ def main():
                     if accelerator.is_main_process:
                         with torch.no_grad():
                             with torch.cuda.amp.autocast():
-                                unwrapped_unet= accelerator.unwrap_model(unet)
+                                unwrapped_unet = accelerator.unwrap_model(unet)
                                 newpipe = TryonPipeline.from_pretrained(
                                     args.pretrained_model_name_or_path,
                                     unet=unwrapped_unet,
-                                    vae= vae,
+                                    vae=vae,
                                     scheduler=noise_scheduler,
-                                    tokenizer=tokenizer,
-                                    tokenizer_2=tokenizer_2,
-                                    text_encoder=text_encoder,
-                                    text_encoder_2=text_encoder_2,
+                                    tokenizer=None,
+                                    tokenizer_2=None,
+                                    text_encoder=None,
+                                    text_encoder_2=None,
                                     image_encoder=image_encoder,
-                                    unet_encoder = unet_encoder,
+                                    unet_encoder=unet_encoder,
                                     torch_dtype=torch.float16,
                                     feature_extractor=CLIPImageProcessor(),
                                     add_watermarker=False,
                                     safety_checker=None,
                                 ).to(accelerator.device)
-                                print(f"VAE is on: {vae.device}")
-                                print(f"Text Encoder is on: {text_encoder.device}")
-                                print(f"Text Encoder 2 is on: {text_encoder_2.device}")
-                                print(f"UNet Encoder is on: {unet_encoder.device}")
-                                print(f"Image Encoder is on: {image_encoder.device}")
-                                get_gpu_memory()
                                 with torch.no_grad():
                                     for sample in test_dataloader:
                                         img_emb_list = []
                                         for i in range(sample['cloth'].shape[0]):
                                             img_emb_list.append(sample['cloth'][i])
 
-                                        prompt = sample["caption"]
-
-                                        num_prompts = sample['cloth'].shape[0]                                        
-                                        negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
-
-                                        if not isinstance(prompt, List):
-                                            prompt = [prompt] * num_prompts
-                                        if not isinstance(negative_prompt, List):
-                                            negative_prompt = [negative_prompt] * num_prompts
-
-                                        image_embeds = torch.cat(img_emb_list,dim=0)
-
+                                        image_embeds = torch.cat(img_emb_list, dim=0)
 
                                         with torch.inference_mode():
-                                            (
-                                                prompt_embeds,
-                                                negative_prompt_embeds,
-                                                pooled_prompt_embeds,
-                                                negative_pooled_prompt_embeds,
-                                            ) = newpipe.encode_prompt(
-                                                prompt,
-                                                num_images_per_prompt=1,
-                                                do_classifier_free_guidance=True,
-                                                negative_prompt=negative_prompt,
-                                            )
-                                        
-                                        
-                                            prompt = sample["caption_cloth"]
-                                            negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
-
-                                            if not isinstance(prompt, List):
-                                                prompt = [prompt] * num_prompts
-                                            if not isinstance(negative_prompt, List):
-                                                negative_prompt = [negative_prompt] * num_prompts
-
-
-                                            with torch.inference_mode():
-                                                (
-                                                    prompt_embeds_c,
-                                                    _,
-                                                    _,
-                                                    _,
-                                                ) = newpipe.encode_prompt(
-                                                    prompt,
-                                                    num_images_per_prompt=1,
-                                                    do_classifier_free_guidance=False,
-                                                    negative_prompt=negative_prompt,
-                                                )
-                                            
-
-
+                                            prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
+                                            negative_prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
+                                            pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
+                                            negative_pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
+                                            prompt_embeds_c = torch.zeros(args.test_batch_size, 77, 2048)
                                             generator = torch.Generator(newpipe.device).manual_seed(args.seed) if args.seed is not None else None
                                             images = newpipe(
-                                                prompt_embeds=prompt_embeds,
-                                                negative_prompt_embeds=negative_prompt_embeds,
-                                                pooled_prompt_embeds=pooled_prompt_embeds,
-                                                negative_pooled_prompt_embeds=negative_pooled_prompt_embeds,
+                                                prompt_embeds=prompt_embeds.to(accelerator.device),
+                                                negative_prompt_embeds=negative_prompt_embeds.to(accelerator.device),
+                                                pooled_prompt_embeds=pooled_prompt_embeds.to(accelerator.device),
+                                                negative_pooled_prompt_embeds=negative_pooled_prompt_embeds.to(accelerator.device),
                                                 num_inference_steps=args.num_inference_steps,
                                                 generator=generator,
                                                 strength=1.0,
-                                                pose_img=F.interpolate(sample['pose_img'], size=(args.height, args.width), mode="bilinear", align_corners=False),
-                                                text_embeds_cloth=prompt_embeds_c,
+                                                # pose_img=F.interpolate(sample['pose_img'], size=(args.height, args.width), mode="bilinear", align_corners=False),
+                                                text_embeds_cloth=prompt_embeds_c.to(accelerator.device),
                                                 cloth=sample["cloth_pure"].to(newpipe.device),
                                                 mask_image=sample['inpaint_mask'],
-                                                image=(sample['image']+1.0)/2.0, 
+                                                image=(sample['image'] + 1.0) / 2.0,
                                                 height=args.height,
                                                 width=args.width,
                                                 guidance_scale=args.guidance_scale,
@@ -575,13 +434,12 @@ def main():
                                             )[0]
 
                                         for i in range(len(images)):
-                                            images[i].save(os.path.join(args.output_dir,str(global_step)+"_"+str(i)+"_"+"test.jpg"))                                    
+                                            images[i].save(os.path.join(args.output_dir, str(global_step) + "_" + str(
+                                                i) + "_" + "test.jpg"))
                                         break
                         del unwrapped_unet
-                        del newpipe                
+                        del newpipe
                         torch.cuda.empty_cache()
-
-
 
                 pixel_values = batch["image"].to(dtype=vae.dtype)
                 model_input = vae.encode(pixel_values).latent_dist.sample()
@@ -591,7 +449,8 @@ def main():
                     batch["im_mask"].reshape(batch["image"].shape).to(dtype=vae.dtype)
                 ).latent_dist.sample()
                 masked_latents = masked_latents * vae.config.scaling_factor
-                masked_latents = F.interpolate(masked_latents, size=(args.height // 8, args.width // 8), mode="bilinear", align_corners=False)
+                masked_latents = F.interpolate(masked_latents, size=(args.height // 8, args.width // 8),
+                                               mode="bilinear", align_corners=False)
                 masks = batch["inpaint_mask"]
                 # resize the mask to latents shape as we concatenate the mask to the latents
                 mask = torch.stack(
@@ -601,104 +460,54 @@ def main():
                 )
                 mask = mask.reshape(-1, 1, args.height // 8, args.width // 8)
 
-                pose_map = vae.encode(batch["pose_img"].to(dtype=vae.dtype)).latent_dist.sample()
-                pose_map = pose_map * vae.config.scaling_factor
-                pose_map = F.interpolate(pose_map, size=(args.height // 8, args.width // 8), mode="bilinear", align_corners=False)
-
                 # Sample noise that we'll add to the latents
                 noise = torch.randn_like(model_input)
 
                 bsz = model_input.shape[0]
                 timesteps = torch.randint(
-                        0, noise_scheduler.config.num_train_timesteps, (bsz,), device=model_input.device
-                    )
+                    0, noise_scheduler.config.num_train_timesteps, (bsz,), device=model_input.device
+                )
                 # Add noise to the latents according to the noise magnitude at each timestep
                 noisy_latents = noise_scheduler.add_noise(model_input, noise, timesteps)
-                latent_model_input = torch.cat([noisy_latents, mask,masked_latents,pose_map], dim=1)
-            
-            
-                text_input_ids = tokenizer(
-                    batch['caption'],
-                    max_length=tokenizer.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
-                text_input_ids_2 = tokenizer_2(
-                    batch['caption'],
-                    max_length=tokenizer_2.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
+                latent_model_input = torch.cat([noisy_latents, mask, masked_latents], dim=1)
+                encoder_hidden_states = torch.zeros(args.train_batch_size, 77, 2048).to(accelerator.device,dtype=vae.dtype)
+                pooled_text_embeds = torch.zeros(args.train_batch_size, 1280).to(accelerator.device, dtype=vae.dtype)
 
-                encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
-                text_embeds = encoder_output.hidden_states[-2]
-                encoder_output_2 = text_encoder_2(text_input_ids_2.to(accelerator.device), output_hidden_states=True)
-                pooled_text_embeds = encoder_output_2[0]
-                text_embeds_2 = encoder_output_2.hidden_states[-2]
-                encoder_hidden_states = torch.concat([text_embeds, text_embeds_2], dim=-1) # concat
-
-
-                def compute_time_ids(original_size, crops_coords_top_left = (0,0)):
+                def compute_time_ids(original_size, crops_coords_top_left=(0, 0)):
                     # Adapted from pipeline.StableDiffusionXLPipeline._get_add_time_ids
-                    target_size = (args.height, args.height) 
+                    target_size = (args.height, args.height)
                     add_time_ids = list(original_size + crops_coords_top_left + target_size)
                     add_time_ids = torch.tensor([add_time_ids])
                     add_time_ids = add_time_ids.to(accelerator.device)
                     return add_time_ids
-                
+
                 add_time_ids = torch.cat(
                     [compute_time_ids((args.height, args.height)) for i in range(bsz)]
                 )
-                        
+
                 img_emb_list = []
                 for i in range(bsz):
                     img_emb_list.append(batch['cloth'][i])
-                
-                image_embeds = torch.cat(img_emb_list,dim=0)
-                image_embeds = image_encoder(image_embeds, output_hidden_states=True).hidden_states[-2]
-                ip_tokens =image_proj_model(image_embeds)
-            
 
+                image_embeds = torch.cat(img_emb_list, dim=0)
+                image_embeds = image_encoder(image_embeds, output_hidden_states=True).hidden_states[-2]
+                ip_tokens = image_proj_model(image_embeds)
 
                 # add cond
                 unet_added_cond_kwargs = {"text_embeds": pooled_text_embeds, "time_ids": add_time_ids}
                 unet_added_cond_kwargs["image_embeds"] = ip_tokens
 
-                cloth_values = batch["cloth_pure"].to(accelerator.device,dtype=vae.dtype)
+                cloth_values = batch["cloth_pure"].to(accelerator.device, dtype=vae.dtype)
                 cloth_values = vae.encode(cloth_values).latent_dist.sample()
                 cloth_values = cloth_values * vae.config.scaling_factor
 
+                text_embeds_cloth = torch.zeros(args.train_batch_size, 77, 2048).to(accelerator.device, dtype=vae.dtype)
 
-                text_input_ids = tokenizer(
-                    batch['caption_cloth'],
-                    max_length=tokenizer.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
-                text_input_ids_2 = tokenizer_2(
-                    batch['caption_cloth'],
-                    max_length=tokenizer_2.model_max_length,
-                    padding="max_length",
-                    truncation=True,
-                    return_tensors="pt"
-                ).input_ids
-
-            
-                encoder_output = text_encoder(text_input_ids.to(accelerator.device), output_hidden_states=True)
-                text_embeds_cloth = encoder_output.hidden_states[-2]
-                encoder_output_2 = text_encoder_2(text_input_ids_2.to(accelerator.device), output_hidden_states=True)
-                text_embeds_2_cloth = encoder_output_2.hidden_states[-2]
-                text_embeds_cloth = torch.concat([text_embeds_cloth, text_embeds_2_cloth], dim=-1) # concat
-
-
-                down,reference_features = unet_encoder(cloth_values,timesteps, text_embeds_cloth,return_dict=False)
+                down, reference_features = unet_encoder(cloth_values, timesteps, text_embeds_cloth, return_dict=False)
                 reference_features = list(reference_features)
 
-                noise_pred = unet(latent_model_input, timesteps, encoder_hidden_states,added_cond_kwargs=unet_added_cond_kwargs,garment_features=reference_features).sample
-
+                noise_pred = unet(latent_model_input, timesteps, encoder_hidden_states,
+                                  added_cond_kwargs=unet_added_cond_kwargs, garment_features=reference_features).sample
 
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
@@ -712,7 +521,6 @@ def main():
                 else:
                     raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
 
-                
                 if args.snr_gamma is None:
                     loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
                 else:
@@ -724,7 +532,7 @@ def main():
                         # Velocity objective requires that we add one to SNR values before we divide by them.
                         snr = snr + 1
                     mse_loss_weights = (
-                        torch.stack([snr, args.snr_gamma * torch.ones_like(timesteps)], dim=1).min(dim=1)[0] / snr
+                            torch.stack([snr, args.snr_gamma * torch.ones_like(timesteps)], dim=1).min(dim=1)[0] / snr
                     )
 
                     loss = F.mse_loss(noise_pred.float(), target.float(), reduction="none")
@@ -734,7 +542,6 @@ def main():
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
-                
                 # Backpropagate
                 accelerator.backward(loss)
 
@@ -766,12 +573,12 @@ def main():
                 pipeline = TryonPipeline.from_pretrained(
                     args.pretrained_model_name_or_path,
                     unet=unwrapped_unet,
-                    vae= vae,
+                    vae=vae,
                     scheduler=noise_scheduler,
-                    tokenizer=tokenizer,
-                    tokenizer_2=tokenizer_2,
-                    text_encoder=text_encoder,
-                    text_encoder_2=text_encoder_2,
+                    tokenizer=None,
+                    tokenizer_2=None,
+                    text_encoder=None,
+                    text_encoder_2=None,
                     image_encoder=image_encoder,
                     unet_encoder=unet_encoder,
                     torch_dtype=torch.float16,
@@ -783,6 +590,6 @@ def main():
                 pipeline.save_pretrained(save_path)
                 del pipeline
 
-                
+
 if __name__ == "__main__":
     main()    
