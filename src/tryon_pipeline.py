@@ -1567,7 +1567,6 @@ class StableDiffusionXLInpaintPipeline(
         num_channels_latents = self.vae.config.latent_channels
         num_channels_unet = self.unet.config.in_channels
         return_image_latents = num_channels_unet == 4
-        print(num_channels_unet)
 
         add_noise = True if self.denoising_start is None else False
         latents_outputs = self.prepare_latents(
@@ -1744,7 +1743,6 @@ class StableDiffusionXLInpaintPipeline(
 
         gt = 0.0
         tt = 0.0
-        print(timesteps)
         self._num_timesteps = len(timesteps)
         with self.progress_bar(total=num_inference_steps) as progress_bar:
             for i, t in enumerate(timesteps):

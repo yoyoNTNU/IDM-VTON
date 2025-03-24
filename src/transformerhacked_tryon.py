@@ -28,6 +28,11 @@ from diffusers.models.modeling_utils import ModelMixin
 from diffusers.models.normalization import AdaLayerNormSingle
 
 
+class CustomIdentity(nn.Module):
+    def forward(self, input, *args, **kwargs):
+        return input
+
+
 @dataclass
 class Transformer2DModelOutput(BaseOutput):
     """
@@ -366,8 +371,10 @@ class Transformer2DModel(ModelMixin, ConfigMixin):
             encoder_hidden_states = self.caption_projection(encoder_hidden_states)
             encoder_hidden_states = encoder_hidden_states.view(batch_size, -1, hidden_states.shape[-1])
 
-
         for block in self.transformer_blocks:
+            if isinstance(block, CustomIdentity):
+                curr_garment_feat_idx += 1
+                continue
             if self.training and self.gradient_checkpointing:
 
                 def create_custom_forward(module, return_dict=None):

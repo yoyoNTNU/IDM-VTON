@@ -210,37 +210,38 @@ class BasicTransformerBlock(nn.Module):
         )
 
         # 2. Cross-Attn
-        if cross_attention_dim is not None or double_self_attention:
-            # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
-            # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
-            # the second cross attention block.
-            if self.use_ada_layer_norm:
-                self.norm2 = AdaLayerNorm(dim, num_embeds_ada_norm)
-            elif self.use_ada_layer_norm_continuous:
-                self.norm2 = AdaLayerNormContinuous(
-                    dim,
-                    ada_norm_continous_conditioning_embedding_dim,
-                    norm_elementwise_affine,
-                    norm_eps,
-                    ada_norm_bias,
-                    "rms_norm",
-                )
-            else:
-                self.norm2 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
-
-            self.attn2 = Attention(
-                query_dim=dim,
-                cross_attention_dim=cross_attention_dim if not double_self_attention else None,
-                heads=num_attention_heads,
-                dim_head=attention_head_dim,
-                dropout=dropout,
-                bias=attention_bias,
-                upcast_attention=upcast_attention,
-                out_bias=attention_out_bias,
-            )  # is self-attn if encoder_hidden_states is none
-        else:
-            self.norm2 = None
-            self.attn2 = None
+        # if cross_attention_dim is not None or double_self_attention:
+        #     # We currently only use AdaLayerNormZero for self attention where there will only be one attention block.
+        #     # I.e. the number of returned modulation chunks from AdaLayerZero would not make sense if returned during
+        #     # the second cross attention block.
+        #     if self.use_ada_layer_norm:
+        #         self.norm2 = AdaLayerNorm(dim, num_embeds_ada_norm)
+        #     elif self.use_ada_layer_norm_continuous:
+        #         self.norm2 = AdaLayerNormContinuous(
+        #             dim,
+        #             ada_norm_continous_conditioning_embedding_dim,
+        #             norm_elementwise_affine,
+        #             norm_eps,
+        #             ada_norm_bias,
+        #             "rms_norm",
+        #         )
+        #     else:
+        #         self.norm2 = nn.LayerNorm(dim, norm_eps, norm_elementwise_affine)
+        #     print(cross_attention_dim)
+        #
+        #     self.attn2 = Attention(
+        #         query_dim=dim,
+        #         cross_attention_dim=cross_attention_dim if not double_self_attention else None,
+        #         heads=num_attention_heads,
+        #         dim_head=attention_head_dim,
+        #         dropout=dropout,
+        #         bias=attention_bias,
+        #         upcast_attention=upcast_attention,
+        #         out_bias=attention_out_bias,
+        #     )  # is self-attn if encoder_hidden_states is none
+        # else:
+        self.norm2 = None
+        self.attn2 = None
 
         # 3. Feed-forward
         if self.use_ada_layer_norm_continuous:
