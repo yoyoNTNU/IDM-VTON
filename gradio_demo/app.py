@@ -20,6 +20,9 @@ from torchvision import transforms
 from detectron2.data.detection_utils import convert_PIL_to_numpy,_apply_exif_orientation
 from torchvision.transforms.functional import to_pil_image
 import pynvml
+from src.transformerhacked_tryon import CustomIdentity
+from src.attentionhacked_tryon import BasicTransformerBlock
+from safetensors.torch import load_file
 
 
 def print_memory_usage(step_name=""):
@@ -57,16 +60,56 @@ def pil_to_binary_mask(pil_image, threshold=0):
 
 
 # base_path = 'yisol/IDM-VTON'
+# base_path = 'C://Users/cgal/Desktop/distillation2/checkpoint-6280'
+# remove_attention_index = [6, 7, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20, 21, 39, 40, 41, 46, 47, 48, 49, 50, 51, 52, 53, 54, 58, 60]
+remove_attention_index = []
 base_path = 'C://Users/cgal/Desktop/9channel retrain/checkpoint-61360'
 example_path = os.path.join(os.path.dirname(__file__), 'example')
+k = 0
+
+
+def is_prunable(module, name):
+    return isinstance(module, BasicTransformerBlock)
+
+
+def replace_prunable_layers(module):
+    # module 是 try on Net
+    for name, child in module.named_children():
+        # 如果子模塊本身是可剪枝的，就替換
+        if is_prunable(child, name):
+            print(f"Replacing {name} of type {type(child)} with Identity")
+            remove_attn_layer(module, name)
+        else:
+            # 否則遞歸處理子模塊
+            replace_prunable_layers(child)
+
+
+def remove_layer(model, layer_name):
+    setattr(model, layer_name, CustomIdentity())
+
+
+def remove_attn_layer(model, layer_name):
+    global k
+    k += 1
+    # 生成剪枝模型，將指定層替換為 Identity（跳過該層）
+    if k in remove_attention_index:
+        print("remove")
+        remove_layer(model, layer_name)
+    return
+
 
 def init():
     unet = UNet2DConditionModel.from_pretrained(
         base_path,
         subfolder="unet",
         torch_dtype=torch.float16,
+        low_cpu_mem_usage=False,
+        ignore_mismatched_sizes=True,
         local_files_only=True
     )
+    if len(remove_attention_index) != 0:
+        replace_prunable_layers(unet)
+        unet.load_state_dict(load_file(f"{base_path}/unet/diffusion_pytorch_model.safetensors"))
     noise_scheduler = DDPMScheduler.from_pretrained(
         base_path,
         subfolder="scheduler",
@@ -157,7 +200,7 @@ pipe, tensor_transform = init()
 #             num_params = param.numel()
 #             k += num_params
 #         print(f"{name}: {k}")
-#
+
 # to = 0
 # for name, param in pipe.unet.named_parameters():
 #     num_params = param.numel()  # 參數數量
