@@ -30,7 +30,6 @@ from src.attentionhacked_tryon import BasicTransformerBlock
 import GPUtil
 
 
-
 class VitonHDDataset(data.Dataset):
     def __init__(
         self,
@@ -191,6 +190,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Simple example of a training script.")
     parser.add_argument("--pretrained_model_name_or_path",type=str,default="diffusers/stable-diffusion-xl-1.0-inpainting-0.1",required=False,help="Path to pretrained model or model identifier from huggingface.co/models.",)
     parser.add_argument("--pretrained_garmentnet_path",type=str,default="stabilityai/stable-diffusion-xl-base-1.0",required=False,help="Path to pretrained model or model identifier from huggingface.co/models.",)
+    parser.add_argument("--student_model_name_or_path", type=str,default=None, required=False, help="Path to pretrained model or model identifier from huggingface.co/models.", )
     parser.add_argument("--checkpointing_epoch",type=int,default=10,help=("Save a checkpoint of the training state every X updates. These checkpoints are only suitable for resuming"" training using `--resume_from_checkpoint`."),)
     parser.add_argument("--pretrained_ip_adapter_path",type=str,default="ckpt/ip_adapter/ip-adapter-plus_sdxl_vit-h.bin",help="Path to pretrained ip adapter model. If not specified weights are initialized randomly.",)
     parser.add_argument("--image_encoder_path",type=str,default="ckpt/image_encoder",required=False,help="Path to CLIP image encoder",)
@@ -252,7 +252,6 @@ def replace_prunable_layers(module):
     for name, child in module.named_children():
         # 如果子模塊本身是可剪枝的，就替換
         if is_prunable(child, name):
-            print(f"Replacing {name} of type {type(child)} with Identity")
             remove_attn_layer(module, name)
             # dic[k] = compute_output_loss(module, name)
         else:
@@ -261,13 +260,10 @@ def replace_prunable_layers(module):
 
 
 def remove_layer(model, layer_name):
-
-    # 假設 layer_name 是模型中一個子模塊的屬性名
-    # 將該層替換為 nn.Identity() 使其輸出保持原樣（或者直接跳過）
     setattr(model, layer_name, CustomIdentity())
 
 
-remove_attention_index = [6, 7, 8, 9, 10, 11, 12, 13, 14, 17, 18, 19, 20, 21, 39, 40, 41, 46, 47, 48, 49, 50, 51, 52, 53, 54, 58, 60]
+remove_attention_index = [7,9,10,11,12,13,19,47,48,49,50,51,52,53]
 k = 0
 
 
@@ -276,7 +272,6 @@ def remove_attn_layer(model, layer_name):
     k += 1
     # 生成剪枝模型，將指定層替換為 Identity（跳過該層）
     if k in remove_attention_index:
-        print("remove")
         remove_layer(model, layer_name)
     return
 
@@ -290,17 +285,18 @@ def main():
         gradient_accumulation_steps=args.gradient_accumulation_steps,
         project_config=accelerator_project_config,
     )
-    print(f"device:{accelerator.device}")
     if accelerator.is_main_process:
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
+    if not args.student_model_name_or_path:
+        args.student_model_name_or_path = args.pretrained_model_name_or_path
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler",rescale_betas_zero_snr=True,local_files_only=True)
     vae = AutoencoderKL.from_pretrained(args.pretrained_model_name_or_path, subfolder="vae", torch_dtype=torch.float16,local_files_only=True)
     unet_encoder = UNet2DConditionModel_ref.from_pretrained(args.pretrained_model_name_or_path,subfolder="unet_encoder",local_files_only=True)
     image_encoder = CLIPVisionModelWithProjection.from_pretrained(args.pretrained_model_name_or_path,subfolder="image_encoder",local_files_only=True)
-    student = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None, local_files_only=True)
+    student = UNet2DConditionModel.from_pretrained(args.student_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None, local_files_only=True)
     teacher = UNet2DConditionModel.from_pretrained(args.pretrained_model_name_or_path, subfolder="unet",low_cpu_mem_usage=False, device_map=None, local_files_only=True)
     replace_prunable_layers(student)
 
@@ -358,7 +354,6 @@ def main():
         weight_decay=args.adam_weight_decay,
         eps=args.adam_epsilon,
     )
-
     train_dataset = VitonHDDataset(
         dataroot_path=args.data_dir,
         phase="train",
@@ -372,26 +367,29 @@ def main():
         batch_size=args.train_batch_size,
         num_workers=16,
     )
-    test_dataset = VitonHDDataset(
-        dataroot_path=args.data_dir,
-        phase="test",
-        order="paired",
-        size=(args.height, args.width),
-    )
-    test_dataloader = torch.utils.data.DataLoader(
-        test_dataset,
-        shuffle=False,
-        batch_size=args.test_batch_size,
-        num_workers=4,
-    )
+    if args.test_batch_size != 0:
+        test_dataset = VitonHDDataset(
+            dataroot_path=args.data_dir,
+            phase="test",
+            order="paired",
+            size=(args.height, args.width),
+        )
+        test_dataloader = torch.utils.data.DataLoader(
+            test_dataset,
+            shuffle=False,
+            batch_size=args.test_batch_size,
+            num_workers=4,
+        )
 
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
-
-    student, optimizer, train_dataloader, test_dataloader = accelerator.prepare(student,optimizer,train_dataloader,test_dataloader)
+    if args.test_batch_size != 0:
+        student, optimizer, train_dataloader, test_dataloader = accelerator.prepare(student,optimizer,train_dataloader,test_dataloader)
+    else:
+        student, optimizer, train_dataloader = accelerator.prepare(student, optimizer, train_dataloader)
 
     initial_global_step = 0
 
@@ -413,14 +411,22 @@ def main():
     global_step = 0
     first_epoch = 0
     train_loss = 0.0
+    text_embeds_cloth = torch.zeros(args.train_batch_size, 77, 2048, device=accelerator.device, dtype=vae.dtype)
+    encoder_hidden_states = torch.zeros(args.train_batch_size, 77, 2048, device=accelerator.device, dtype=vae.dtype)
+    pooled_text_embeds = torch.zeros(args.train_batch_size, 1280, device=accelerator.device, dtype=vae.dtype)
     for epoch in range(first_epoch, args.num_train_epochs):
         for step, batch in enumerate(train_dataloader):
             with accelerator.accumulate(student), accelerator.accumulate(image_proj_model):
-                if global_step % args.logging_steps == 0:
+                if args.test_batch_size != 0 and global_step % args.logging_steps == 0:
                     if accelerator.is_main_process:
                         with torch.no_grad():
                             with torch.cuda.amp.autocast():
                                 unwrapped_student = accelerator.unwrap_model(student)
+                                prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
+                                negative_prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
+                                pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
+                                negative_pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
+                                prompt_embeds_c = torch.zeros(args.test_batch_size, 77, 2048)
                                 newpipe = TryonPipeline.from_pretrained(
                                     args.pretrained_model_name_or_path,
                                     unet=teacher,
@@ -446,11 +452,6 @@ def main():
                                         image_embeds = torch.cat(img_emb_list, dim=0)
 
                                         with torch.inference_mode():
-                                            prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
-                                            negative_prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
-                                            pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
-                                            negative_pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
-                                            prompt_embeds_c = torch.zeros(args.test_batch_size, 77, 2048)
                                             generator = torch.Generator(newpipe.device).manual_seed(args.seed) if args.seed is not None else None
                                             images = newpipe(
                                                 prompt_embeds=prompt_embeds.to(accelerator.device),
@@ -473,7 +474,7 @@ def main():
 
                                         for i in range(len(images)):
                                             images[i].save(os.path.join(args.output_dir, str(global_step) + "_" + str(
-                                                i) + "_" + "tes_teacher.jpg"))
+                                                i) + "_" + "test_teacher.jpg"))
                                         break
                                 newpipe.unet = unwrapped_student
                                 with torch.no_grad():
@@ -485,11 +486,6 @@ def main():
                                         image_embeds = torch.cat(img_emb_list, dim=0)
 
                                         with torch.inference_mode():
-                                            prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
-                                            negative_prompt_embeds = torch.zeros(args.test_batch_size, 77, 2048)
-                                            pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
-                                            negative_pooled_prompt_embeds = torch.zeros(args.test_batch_size, 1280)
-                                            prompt_embeds_c = torch.zeros(args.test_batch_size, 77, 2048)
                                             generator = torch.Generator(newpipe.device).manual_seed(args.seed) if args.seed is not None else None
                                             images = newpipe(
                                                 prompt_embeds=prompt_embeds.to(accelerator.device),
@@ -547,8 +543,6 @@ def main():
                 # Add noise to the latents according to the noise magnitude at each timestep
                 noisy_latents = noise_scheduler.add_noise(model_input, noise, timesteps)
                 latent_model_input = torch.cat([noisy_latents, mask, masked_latents], dim=1)
-                encoder_hidden_states = torch.zeros(args.train_batch_size, 77, 2048).to(accelerator.device,dtype=vae.dtype)
-                pooled_text_embeds = torch.zeros(args.train_batch_size, 1280).to(accelerator.device, dtype=vae.dtype)
 
                 def compute_time_ids(original_size, crops_coords_top_left=(0, 0)):
                     # Adapted from pipeline.StableDiffusionXLPipeline._get_add_time_ids
@@ -578,16 +572,36 @@ def main():
                 cloth_values = vae.encode(cloth_values).latent_dist.sample()
                 cloth_values = cloth_values * vae.config.scaling_factor
 
-                text_embeds_cloth = torch.zeros(args.train_batch_size, 77, 2048).to(accelerator.device, dtype=vae.dtype)
-
-                down, reference_features = unet_encoder(cloth_values, timesteps, text_embeds_cloth, return_dict=False)
+                _, reference_features = unet_encoder(cloth_values, timesteps, text_embeds_cloth, return_dict=False)
                 reference_features = list(reference_features)
 
-                student_noise_pred = student(latent_model_input, timesteps, encoder_hidden_states,
-                                  added_cond_kwargs=unet_added_cond_kwargs, garment_features=reference_features).sample
-                # encoder_hidden_states = torch.zeros(args.train_batch_size, 77, 2048).to(accelerator.device,dtype=vae.dtype)
-                teacher_noise_pred = student(latent_model_input, timesteps, encoder_hidden_states,
-                                  added_cond_kwargs=unet_added_cond_kwargs,garment_features=reference_features).sample
+                with torch.cuda.amp.autocast(dtype=torch.float16):
+                    student_noise_pred, student_feature = student(latent_model_input, timesteps, encoder_hidden_states,
+                                  added_cond_kwargs=unet_added_cond_kwargs, garment_features=reference_features)
+                    teacher_noise_pred, teacher_feature = teacher(latent_model_input, timesteps, encoder_hidden_states,
+                                      added_cond_kwargs=unet_added_cond_kwargs,garment_features=reference_features)
+                    student_noise_pred = student_noise_pred.sample
+                    teacher_noise_pred = teacher_noise_pred.sample
+
+                def normalized_feature_distillation_loss(features_t, features_s):
+                    assert len(features_t) == len(features_s), "教師和學生特徵數量必須相同"
+                    V = len(features_t)
+                    norm_t = []
+                    # 計算每層的 L2-Norm
+                    for f_t in features_t:
+                        norm_t.append(torch.norm(f_t, p=2).item())
+
+                    # 計算權重 α_i
+                    alpha = []
+                    for j in range(V):
+                        alpha.append(sum(norm_t) / (V * norm_t[j]))
+
+                    # 計算正規化後的特徵蒸餾損失
+                    f_loss = 0
+                    for j in range(V):
+                        ff_loss = F.mse_loss(features_s[j], features_t[j], reduction='mean')
+                        f_loss += alpha[j] * ff_loss / 100000
+                    return f_loss
 
                 if noise_scheduler.config.prediction_type == "epsilon":
                     target = noise
@@ -603,8 +617,8 @@ def main():
 
                 origin_loss = F.mse_loss(student_noise_pred.float(), target.float(), reduction="mean")
                 distill_loss = F.mse_loss(student_noise_pred.float(), teacher_noise_pred.float(), reduction="mean")
-                loss = origin_loss + distill_loss
-
+                feature_loss = normalized_feature_distillation_loss(teacher_feature, student_feature)
+                loss = origin_loss * 0.8 + (distill_loss + feature_loss) * 0.2
 
                 avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
                 train_loss += avg_loss.item() / args.gradient_accumulation_steps

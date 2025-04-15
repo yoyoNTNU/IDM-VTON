@@ -1277,7 +1277,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             )
             down_intrablock_additional_residuals = down_block_additional_residuals
             is_adapter = True
-
+        middle_feature = []
         down_block_res_samples = (sample,)
         for downsample_block in self.down_blocks:
             if hasattr(downsample_block, "has_cross_attention") and downsample_block.has_cross_attention:
@@ -1303,6 +1303,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                     sample += down_intrablock_additional_residuals.pop(0)
 
             down_block_res_samples += res_samples
+            middle_feature.append(sample)
 
 
         if is_controlnet:
@@ -1379,6 +1380,7 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
                     upsample_size=upsample_size,
                     scale=lora_scale,
                 )
+            middle_feature.append(sample)
         # 6. post-process
         if self.conv_norm_out:
             sample = self.conv_norm_out(sample)
@@ -1390,6 +1392,6 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin, UNet2DConditionLoadersMixin)
             unscale_lora_layers(self, lora_scale)
 
         if not return_dict:
-            return (sample,)
+            return sample, middle_feature
 
-        return UNet2DConditionOutput(sample=sample)
+        return UNet2DConditionOutput(sample=sample), middle_feature
